@@ -38,13 +38,19 @@ from scipy.stats import poisson
 # 疫情传播参数
 ##############
 # N为人群总数
-N =22000000
+N =22000
 # I_0为感染未住院的初始人数
-I_0 = 1
+I_0 = 1/1000
 # β = 传染率系数
-beta = 0.5
-# Tr(recover) = 轻症自愈所需天数
-Tr = 15
+beta = 0.55
+# Tr(recover) = 轻症恢复所需天数
+Tr = 10
+# Ta(again) = 恢复人群转易感天数
+Ta = 10
+# again = 恢复人群转易感比例
+again = 0.02
+# d = 12月7号在传播过程的第几天
+d = 28
 
 
 ##############
@@ -55,9 +61,9 @@ severe_sick = 0.001
 # severe_not_sick = 总人群中，没有基础疾病，但会重症的人的比例
 severe_not_sick = 0.003
 # Ts_sick = 对于有基础疾病的人群（severe_sick）来说， 轻症转重症的平均天数
-Ts_sick = 1
+Ts_sick = 3
 # Ts_not_sick = 对于没有基础疾病的人群（severe_not_sick）来说， 轻症转重症的平均天数
-Ts_not_sick = 5
+Ts_not_sick = 7
 
 
 ##############
@@ -66,7 +72,7 @@ Ts_not_sick = 5
 # bed 为可用床位
 bed = 1000
 # cure_rate = 住院总数中每天治愈出院的比例
-cure_rate = 0.05
+cure_rate = 0.07
 # cure_rate = 住院总数中每天不治死亡的比例
 death_rate = 0.01
 # Td_out = 院外重症人群的存活天数（不管有/没有基础疾病， 对于severe_sick + severe_not_sick 人群）
@@ -81,7 +87,7 @@ R_0 = 0
 # S_0为易感者的初始人数
 S_0 = N - I_0 - R_0
 # T为传播时间
-T = 150
+T = 365
 # T_range = 时间序列的天数
 T_range = np.arange(0, T + 1)
 # INI为初始状态下的数组
@@ -154,11 +160,11 @@ def funcSIR(inivalue,_):
     Y = np.zeros(3)
     X = inivalue
     # 易感个体变化
-    Y[0] = - (beta * X[0] * X[1]) / N
+    Y[0] = - (beta * X[0] * X[1]) / N + X[2] / Ta * again
     # 感染个体变化
     Y[1] = (beta * X[0] * X[1]) / N - X[1] / Tr
     # 治愈个体变化
-    Y[2] = X[1] / Tr
+    Y[2] = X[1] / Tr - X[2] / Ta * again
     return Y
 
 
@@ -175,11 +181,15 @@ def integrate_SIU(T_range, INI):
     plt.plot(RES[:, 1], color='red', label='Infection')
     plt.plot(RES[:, 2], color='green', label='Unsusceptible')
     plt.plot(new_I, color='darkblue', label='Newly_Infected', linestyle="--")
+    plt.scatter(8+d, 2000, color='darkblue', label='Beijing_peak_Dec15_new2million')
+    plt.scatter(8+d, N * 0.6 - RES[:, 2][8+d], color='red', marker='s', s=50, label='Beijing_peak_Dec15_cumu_60%-Recoverd')
+    plt.scatter(d, 20, color='red', marker='s', s=50, label='Beijing_Dec7_cumu_20k')
+    plt.scatter(d, 10, color='darkblue', label='Beijing_Dec7_new10k')
 
-    plt.title('SIR Model')
+    plt.title('SIR Model, beta={}, Tr={}, Ta={}, again={}%'.format(beta, Tr, Ta, again*100))
     plt.legend()
     plt.xlabel('Day')
-    plt.ylabel('Number')
+    plt.ylabel('Number / k')
     plt.xlim((0, T))
     plt.show()
 
@@ -195,8 +205,8 @@ def infection_to_severe(new_I):
     # 画图
     fig, ax = plt.subplots(2,sharex='all')
     ax[0].plot(new_I, color='darkblue', label='Newly_Infected', linestyle="--")
-    ax[1].plot(newly_severe_sick, label="Newly_Severe_Sick, Ts={}".format(Ts_sick))
-    ax[1].plot(newly_severe_not_sick, color='green', label="Newly_Severe_not_Sick, Ts={}".format(Ts_not_sick))
+    ax[1].plot(newly_severe_sick, label="Newly_Severe_Sick ({:.1%}), Ts={}".format(severe_sick, Ts_sick))
+    ax[1].plot(newly_severe_not_sick, color='green', label="Newly_Severe_not_Sick ({:.1%}), Ts={}".format(severe_not_sick, Ts_not_sick))
     ax[1].plot(newly_severe, color='red', label="Newly_Severe")
     ax[0].legend()
     ax[1].legend()
@@ -212,23 +222,23 @@ def infection_to_severe(new_I):
 if __name__ == '__main__':
     # 通过传播模型得出每日新增感染曲线
     RES, new_I = integrate_SIU(T_range, INI)
-    newly_severe = infection_to_severe(new_I)
-    final_death = hospital(newly_severe, bed)
+    # newly_severe = infection_to_severe(new_I)
+    # final_death = hospital(newly_severe, bed)
 
-    # 基于每日新增重症曲线，探究床位对于死亡人数对影响
-    death_list = []
-    bed_list = [2000, 4000, 6000]
-    for bed in bed_list:
-        death = hospital(newly_severe, bed)
-        death_list.append(death)
-
-    # 画图床位对于死亡人数对影响
-    plt.plot(bed_list, death_list)
-    plt.title("Death against Beds")
-    plt.xlabel("Bed / Million Population")
-    plt.ylabel("Death")
-    plt.show()
-
+    # # 基于每日新增重症曲线，探究床位对于死亡人数对影响
+    # death_list = []
+    # bed_list = [2000, 4000, 6000]
+    # for bed in bed_list:
+    #     death = hospital(newly_severe, bed)
+    #     death_list.append(death)
+    #
+    # # 画图床位对于死亡人数对影响
+    # plt.plot(bed_list, death_list)
+    # plt.title("Death against Beds")
+    # plt.xlabel("Bed / Million Population")
+    # plt.ylabel("Death")
+    # plt.show()
+    #
 
 
 
